@@ -4,6 +4,7 @@
   "private": true,
   "description": "서울시 문화행사 안내",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "fetch-events": "node scripts/fetch-events.js"
   }
 }

@@ -63,8 +63,11 @@ const detailDialog = document.querySelector("#detailDialog");
 const detailContent = document.querySelector("#detailContent");
 const todayLabel = document.querySelector("#todayLabel");
 
+const USE_LIVE_API = ["localhost", "127.0.0.1"].includes(location.hostname);
+
 let currentPage = 1;
 let searchTimer = 0;
+let staticCache = null;
 
 function fillSelect(select, values) {
   for (const value of values) {
@@ -144,7 +147,7 @@ function showSkeletons() {
   pagination.innerHTML = "";
 }
 
-async function fetchEvents(start, end) {
+async function fetchLiveEvents(start, end) {
   const params = new URLSearchParams({
     start: String(start),
     end: String(end),
@@ -176,6 +179,38 @@ async function fetchEvents(start, end) {
     total: Number(payload.list_total_count) || rows.length,
     rows,
   };
+}
+
+async function loadStaticEvents() {
+  if (staticCache) return staticCache;
+  const response = await fetch("data/events.json");
+  if (!response.ok) {
+    throw new Error("GitHub Pages에서는 미리 저장한 행사 목록이 필요합니다.");
+  }
+  staticCache = await response.json();
+  return staticCache;
+}
+
+function matchesDate(event, date) {
+  if (!date) return true;
+  const start = parseDate(event.STRTDATE);
+  const end = parseDate(event.END_DATE) || start;
+  if (start && end) return date >= start && date <= end;
+  return cleanText(event.DATE).includes(date);
+}
+
+function filterStaticRows(rows) {
+  const title = titleInput.value.trim().toLowerCase();
+  const code = codeSelect.value;
+  const date = dateInput.value;
+  return rows.filter((row) => {
+    if (title && !cleanText(row.TITLE).toLowerCase().includes(title)) return false;
+    if (code && cleanText(row.CODENAME) !== code) return false;
+    if (!matchesDate(row, date)) return false;
+    if (districtSelect.value && cleanText(row.GUNAME) !== districtSelect.value) return false;
+    if (feeSelect.value && cleanText(row.IS_FREE) !== feeSelect.value) return false;
+    return true;
+  });
 }
 
 function renderCards(rows) {
@@ -336,10 +371,25 @@ async function loadEvents() {
   resultMeta.textContent = "서울시 문화행사 정보를 불러오는 중입니다.";
 
   try {
+    if (!USE_LIVE_API) {
+      const cache = await loadStaticEvents();
+      const filtered = filterStaticRows(cache.rows || []);
+      const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+      renderCards(visible);
+      renderPagination(filtered.length, currentPage, PAGE_SIZE);
+      const updated = cache.updatedAt
+        ? new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(
+            new Date(cache.updatedAt)
+          )
+        : "";
+      resultMeta.innerHTML = `저장된 ${Number(cache.rows?.length || 0).toLocaleString("ko-KR")}건 중 <strong>${filtered.length.toLocaleString("ko-KR")}</strong>건을 보여줍니다.${updated ? ` 업데이트: ${updated}` : ""}`;
+      return;
+    }
+
     const clientFilterOn = hasClientFilter();
     const start = clientFilterOn ? 1 : (currentPage - 1) * PAGE_SIZE + 1;
     const end = clientFilterOn ? WIDE_FETCH : currentPage * PAGE_SIZE;
-    const data = await fetchEvents(start, end);
+    const data = await fetchLiveEvents(start, end);
     const filtered = applyClientFilter(data.rows);
     const visible = clientFilterOn
       ? filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
@@ -352,7 +402,7 @@ async function loadEvents() {
     if (clientFilterOn) {
       resultMeta.innerHTML = `최근 ${data.rows.length}건 가운데 <strong>${filtered.length}</strong>건이 조건에 맞습니다. 전체 등록 행사는 ${data.total.toLocaleString("ko-KR")}건입니다.`;
     } else {
-      resultMeta.innerHTML = `전체 <strong>${data.total.toLocaleString("ko-KR")}</strong>건 중 ${(start).toLocaleString("ko-KR")}–${Math.min(end, data.total).toLocaleString("ko-KR")}번째 행사를 보고 있습니다.`;
+      resultMeta.innerHTML = `전체 <strong>${data.total.toLocaleString("ko-KR")}</strong>건 중 ${start.toLocaleString("ko-KR")}–${Math.min(end, data.total).toLocaleString("ko-KR")}번째 행사를 보고 있습니다.`;
     }
   } catch (error) {
     resultMeta.textContent = "행사 정보를 가져오지 못했습니다.";
