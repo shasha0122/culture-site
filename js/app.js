@@ -156,7 +156,13 @@ async function fetchLiveEvents(start, end) {
     date: dateInput.value,
   });
   const response = await fetch(`/api/events?${params}`);
-  const data = await response.json();
+  const text = await response.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("서울시 API 응답을 읽지 못했습니다. 인증키를 확인해 주세요.");
+  }
 
   if (!response.ok) {
     throw new Error(data.error || "행사를 불러오지 못했습니다.");
@@ -405,8 +411,17 @@ async function loadEvents() {
       resultMeta.innerHTML = `전체 <strong>${data.total.toLocaleString("ko-KR")}</strong>건 중 ${start.toLocaleString("ko-KR")}–${Math.min(end, data.total).toLocaleString("ko-KR")}번째 행사를 보고 있습니다.`;
     }
   } catch (error) {
-    resultMeta.textContent = "행사 정보를 가져오지 못했습니다.";
-    showStatus(escapeHtml(error.message));
+    try {
+      const cache = await loadStaticEvents();
+      const filtered = filterStaticRows(cache.rows || []);
+      const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+      renderCards(visible);
+      renderPagination(filtered.length, currentPage, PAGE_SIZE);
+      resultMeta.innerHTML = `실시간 API를 쓰지 못해 저장된 목록을 보여줍니다. ${escapeHtml(error.message)}`;
+    } catch {
+      resultMeta.textContent = "행사 정보를 가져오지 못했습니다.";
+      showStatus(escapeHtml(error.message));
+    }
   }
 }
 
