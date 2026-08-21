@@ -411,17 +411,8 @@ async function loadEvents() {
       resultMeta.innerHTML = `전체 <strong>${data.total.toLocaleString("ko-KR")}</strong>건 중 ${start.toLocaleString("ko-KR")}–${Math.min(end, data.total).toLocaleString("ko-KR")}번째 행사를 보고 있습니다.`;
     }
   } catch (error) {
-    try {
-      const cache = await loadStaticEvents();
-      const filtered = filterStaticRows(cache.rows || []);
-      const visible = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-      renderCards(visible);
-      renderPagination(filtered.length, currentPage, PAGE_SIZE);
-      resultMeta.innerHTML = `실시간 API를 쓰지 못해 저장된 목록을 보여줍니다. ${escapeHtml(error.message)}`;
-    } catch {
-      resultMeta.textContent = "행사 정보를 가져오지 못했습니다.";
-      showStatus(escapeHtml(error.message));
-    }
+    resultMeta.textContent = "행사 정보를 가져오지 못했습니다.";
+    showStatus(escapeHtml(error.message));
   }
 }
 
