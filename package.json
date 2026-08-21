@@ -1,0 +1,9 @@
+{
+  "name": "seoul-culture-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "서울시 문화행사 안내",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
