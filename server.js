@@ -8,6 +8,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { fetchCulturalEvents } = require("./lib/seoul-api");
 
 function loadEnv() {
   const envPath = path.join(__dirname, ".env");
@@ -33,10 +34,9 @@ function loadEnv() {
 loadEnv();
 
 const PORT = Number(process.env.PORT) || 5500;
-const API_KEY = process.env.SEOUL_API_KEY;
 const ROOT = path.resolve(__dirname);
 
-if (!API_KEY) {
+if (!process.env.SEOUL_API_KEY) {
   console.error("SEOUL_API_KEY가 없습니다. .env.example을 참고해 .env 파일을 만들어 주세요.");
   process.exit(1);
 }
@@ -56,11 +56,6 @@ const MIME = {
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { "Cache-Control": "no-cache", ...headers });
   res.end(body);
-}
-
-function pathSegment(value) {
-  const text = String(value || "").trim();
-  return text ? encodeURIComponent(text) : "%20";
 }
 
 function serveStatic(req, res) {
@@ -84,47 +79,28 @@ function serveStatic(req, res) {
   });
 }
 
-function proxyEvents(req, res) {
+async function proxyEvents(req, res) {
   const url = new URL(req.url, "http://localhost");
-  const start = Math.max(1, Number.parseInt(url.searchParams.get("start") || "1", 10) || 1);
-  const requestedEnd = Number.parseInt(url.searchParams.get("end") || String(start + 11), 10) || start;
-  const end = Math.min(Math.max(requestedEnd, start), start + 99);
-
-  const apiPath = `/${API_KEY}/json/culturalEventInfo/${start}/${end}/${pathSegment(
-    url.searchParams.get("code")
-  )}/${pathSegment(url.searchParams.get("title"))}/${pathSegment(url.searchParams.get("date"))}`;
-
-  const apiReq = http.get(
-    {
-      hostname: "openapi.seoul.go.kr",
-      port: 8088,
-      path: apiPath,
-      timeout: 15000,
-      headers: { Accept: "application/json" },
-    },
-    (apiRes) => {
-      const chunks = [];
-      apiRes.on("data", (chunk) => chunks.push(chunk));
-      apiRes.on("end", () => {
-        send(res, 200, Buffer.concat(chunks), {
-          "Content-Type": "application/json; charset=utf-8",
-        });
-      });
-    }
-  );
-
-  apiReq.on("timeout", () => apiReq.destroy(new Error("timeout")));
-  apiReq.on("error", (err) => {
+  try {
+    const body = await fetchCulturalEvents({
+      start: url.searchParams.get("start"),
+      end: url.searchParams.get("end"),
+      code: url.searchParams.get("code"),
+      title: url.searchParams.get("title"),
+      date: url.searchParams.get("date"),
+    });
+    send(res, 200, body, { "Content-Type": "application/json; charset=utf-8" });
+  } catch (err) {
     send(
       res,
-      502,
+      err.statusCode || 502,
       JSON.stringify({
         error: "서울시 공공API에 연결하지 못했습니다.",
         detail: err.message,
       }),
       { "Content-Type": "application/json; charset=utf-8" }
     );
-  });
+  }
 }
 
 const server = http.createServer((req, res) => {

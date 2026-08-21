@@ -63,7 +63,7 @@ const detailDialog = document.querySelector("#detailDialog");
 const detailContent = document.querySelector("#detailContent");
 const todayLabel = document.querySelector("#todayLabel");
 
-const USE_LIVE_API = ["localhost", "127.0.0.1"].includes(location.hostname);
+const USE_LIVE_API = !location.hostname.endsWith("github.io");
 
 let currentPage = 1;
 let searchTimer = 0;
