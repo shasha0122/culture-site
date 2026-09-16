@@ -70,6 +70,7 @@ let searchTimer = 0;
 let staticCache = null;
 let loadSeq = 0;
 let lastQueryKey = "";
+let filtersReady = false;
 
 function fillSelect(select, values) {
   for (const value of values) {
@@ -168,6 +169,17 @@ async function fetchLiveEvents(start, end) {
     title: titleInput.value.trim(),
     date: dateInput.value,
   });
+  const cacheKey = params.toString();
+  try {
+    const raw = sessionStorage.getItem(`culture-events:${cacheKey}`);
+    if (raw) {
+      const cached = JSON.parse(raw);
+      if (Date.now() - cached.at < 60000 && cached.data) return cached.data;
+    }
+  } catch {
+    // ignore cache read errors
+  }
+
   const response = await fetch(`/api/events?${params}`);
   const text = await response.text();
   let data;
@@ -194,10 +206,19 @@ async function fetchLiveEvents(start, end) {
   }
 
   const rows = Array.isArray(payload.row) ? payload.row : payload.row ? [payload.row] : [];
-  return {
+  const resultData = {
     total: Number(payload.list_total_count) || rows.length,
     rows,
   };
+  try {
+    sessionStorage.setItem(
+      `culture-events:${cacheKey}`,
+      JSON.stringify({ at: Date.now(), data: resultData })
+    );
+  } catch {
+    // ignore quota errors
+  }
+  return resultData;
 }
 
 async function loadStaticEvents() {
@@ -435,6 +456,8 @@ async function loadEvents() {
     lastQueryKey = "";
     resultMeta.textContent = "행사 정보를 가져오지 못했습니다.";
     showStatus(escapeHtml(error.message));
+  } finally {
+    filtersReady = true;
   }
 }
 
@@ -455,6 +478,7 @@ resetBtn.addEventListener("click", () => {
 });
 
 titleInput.addEventListener("input", () => {
+  if (!filtersReady) return;
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(() => {
     currentPage = 1;
@@ -464,6 +488,7 @@ titleInput.addEventListener("input", () => {
 
 [codeSelect, districtSelect, dateInput, feeSelect].forEach((element) => {
   element.addEventListener("change", () => {
+    if (!filtersReady) return;
     currentPage = 1;
     loadEvents();
   });
