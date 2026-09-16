@@ -68,6 +68,8 @@ const USE_LIVE_API = !location.hostname.endsWith("github.io");
 let currentPage = 1;
 let searchTimer = 0;
 let staticCache = null;
+let loadSeq = 0;
+let lastQueryKey = "";
 
 function fillSelect(select, values) {
   for (const value of values) {
@@ -139,6 +141,17 @@ function showStatus(message) {
   statusArea.innerHTML = `<p>${message}</p>`;
   eventGrid.innerHTML = "";
   pagination.innerHTML = "";
+}
+
+function currentQueryKey() {
+  return [
+    currentPage,
+    titleInput.value.trim(),
+    codeSelect.value,
+    districtSelect.value,
+    dateInput.value,
+    feeSelect.value,
+  ].join("|");
 }
 
 function showSkeletons() {
@@ -373,6 +386,11 @@ function openDetail(event) {
 }
 
 async function loadEvents() {
+  const queryKey = currentQueryKey();
+  if (queryKey === lastQueryKey) return;
+  const seq = ++loadSeq;
+  lastQueryKey = queryKey;
+
   showSkeletons();
   resultMeta.textContent = "서울시 문화행사 정보를 불러오는 중입니다.";
 
@@ -388,6 +406,7 @@ async function loadEvents() {
             new Date(cache.updatedAt)
           )
         : "";
+      if (seq !== loadSeq) return;
       resultMeta.innerHTML = `저장된 ${Number(cache.rows?.length || 0).toLocaleString("ko-KR")}건 중 <strong>${filtered.length.toLocaleString("ko-KR")}</strong>건을 보여줍니다.${updated ? ` 업데이트: ${updated}` : ""}`;
       return;
     }
@@ -396,6 +415,7 @@ async function loadEvents() {
     const start = clientFilterOn ? 1 : (currentPage - 1) * PAGE_SIZE + 1;
     const end = clientFilterOn ? WIDE_FETCH : currentPage * PAGE_SIZE;
     const data = await fetchLiveEvents(start, end);
+    if (seq !== loadSeq) return;
     const filtered = applyClientFilter(data.rows);
     const visible = clientFilterOn
       ? filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
@@ -411,6 +431,8 @@ async function loadEvents() {
       resultMeta.innerHTML = `전체 <strong>${data.total.toLocaleString("ko-KR")}</strong>건 중 ${start.toLocaleString("ko-KR")}–${Math.min(end, data.total).toLocaleString("ko-KR")}번째 행사를 보고 있습니다.`;
     }
   } catch (error) {
+    if (seq !== loadSeq) return;
+    lastQueryKey = "";
     resultMeta.textContent = "행사 정보를 가져오지 못했습니다.";
     showStatus(escapeHtml(error.message));
   }
